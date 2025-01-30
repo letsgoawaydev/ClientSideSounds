@@ -43,68 +43,25 @@ import java.util.concurrent.Executors;
 
 @Mod(modid = "clientsidesounds", version = "1", clientSideOnly = true)
 public class ClientSideSounds {
-    private static boolean enabled = true;
+    public static final ExecutorService executor = Executors.newFixedThreadPool(15);
+    public static boolean enabled = true;
     // Switched from CopyOnWriteArrayList to ArrayList for performance even
     // exceptions might occur in rare cases
-    private final ArrayList<String> blocks = new ArrayList<String>();
-    private boolean inited = false;
-    private static boolean local;
-    // Multithreading B)
-    private final ExecutorService executor = Executors.newFixedThreadPool(15);
 
-    private long ping;
+    private boolean inited = false;
+    public static boolean local;
+    // Multithreading B)
+
+
 
     // Initialize the mod, which only consists of a few event listeners and one
     // singular command
     @EventHandler
     public void init(FMLInitializationEvent event) {
         MinecraftForge.EVENT_BUS.register(this);
-        ClientCommandHandler.instance.registerCommand(new CMD());
+        ClientCommandHandler.instance.registerCommand(new BPSCommand());
     }
 
-    // Command (/bps)
-    private static class CMD extends CommandBase {
-        @Override
-        public String getCommandName() {
-            return "bps";
-        }
-
-        @Override
-        public String getCommandUsage(ICommandSender iCommandSender) {
-            return "/bps";
-        }
-
-        @Override
-        public boolean canCommandSenderUseCommand(ICommandSender iCommandSender) {
-            return true;
-        }
-
-        @Override
-        public void processCommand(ICommandSender iCommandSender, String[] strings) throws CommandException {
-            if (strings.length == 0) {
-                if (enabled && !local)
-                    iCommandSender.addChatMessage(
-                            new ChatComponentText("BPS is currently enabled. Do \"/bps toggle\" to disable it."));
-                else
-                    iCommandSender.addChatMessage(
-                            new ChatComponentText("BPS is currently disabled. Do \"/bps toggle\" to enable it."));
-            } else if (strings[0].equals("toggle")) {
-                if (local)
-                    iCommandSender.addChatMessage(new ChatComponentText("You don't need it on a local server."));
-                else {
-                    if (enabled)
-                        iCommandSender.addChatMessage(new ChatComponentText(
-                                "BPS has been disabled, log out of current server for the toggle to take effect."));
-                    else
-                        iCommandSender.addChatMessage(new ChatComponentText(
-                                "BPS has been enabled, log out of current server for the toggle to take effect."));
-                    enabled = !enabled;
-                }
-            } else
-                iCommandSender.addChatMessage(new ChatComponentText(
-                        "Unknown command, do \"/bps\" to check current toggle state, \"/bps toggle\" to toggle it."));
-        }
-    }
 
     // Triggered when you join a server to initialize the packet handlers
     @SubscribeEvent
@@ -114,179 +71,14 @@ public class ClientSideSounds {
         if (enabled) {
             // You don't need this on local server
             if (!local) {
-                blocks.clear();
+                PacketHandler.blocks.clear();
                 // Create a netty pipeline handler
-                ChannelDuplexHandler handlerIn = new ChannelDuplexHandler() {
-                    @Override
-                    public void channelRead(ChannelHandlerContext context, Object packet) throws Exception {
-                        // Ignore S29PacketSoundEffect of those blocks you placed
-                        try {
-                            if (packet instanceof S29PacketSoundEffect) {
-                                S29PacketSoundEffect blockPlacePacket = (S29PacketSoundEffect) packet;
-                                // ((S29PacketSoundEffect)packet).getPitch()==0.7936508f &&
-                                if (blocks.contains(blockPlacePacket.getX() + " " +
-                                        blockPlacePacket.getY() + " " +
-                                        blockPlacePacket.getZ()))
-                                    ;
-                                else
-                                    super.channelRead(context, packet);
-                            } else
-                                super.channelRead(context, packet);
-
-                        } catch (ConcurrentModificationException e) {
-                            super.channelRead(context, packet);
-                        }
-                    }
-                };
-                ChannelDuplexHandler handlerOut = new ChannelDuplexHandler() {
-                    @Override
-                    public void write(ChannelHandlerContext context, Object packet, ChannelPromise channelPromise)
-                            throws Exception {
-                        super.write(context, packet, channelPromise);
-                        // Use block placing packet instead of event manager because latter sucks
-                        if (packet instanceof C08PacketPlayerBlockPlacement &&
-                                !Minecraft.getMinecraft().playerController.getCurrentGameType().isAdventure()) {
-                            executor.execute(() -> {
-                                C08PacketPlayerBlockPlacement blockpacket = (C08PacketPlayerBlockPlacement) packet;
-                                if (// Block direction=255 means nothing is placed
-                                blockpacket.getPlacedBlockDirection() != 255 &&
-                                        blockpacket.getStack() != null &&
-                                        blockpacket.getStack().getItem() instanceof ItemBlock) {
-                                    boolean notthisblock = true;
-                                    switch (Block.getIdFromBlock(Minecraft.getMinecraft().theWorld
-                                            .getBlockState(blockpacket.getPosition()).getBlock())) {
-                                        // Some blocks are usable on rightclick
-                                        case 23:
-                                        case 25:
-                                        case 26:
-                                        case 36:
-                                        case 54:
-                                        case 61:
-                                        case 62:
-                                        case 63:
-                                        case 64:
-                                        case 68:
-                                        case 58:
-                                        case 69:
-                                        case 71:
-                                        case 77:
-                                        case 84:
-                                        case 85:
-                                        case 92:
-                                        case 93:
-                                        case 94:
-                                        case 96:
-                                        case 107:
-                                        case 113:
-                                        case 116:
-                                        case 117:
-                                        case 118:
-                                        case 122:
-                                        case 130:
-                                        case 137:
-                                        case 138:
-                                        case 140:
-                                        case 143:
-                                        case 145:
-                                        case 146:
-                                        case 149:
-                                        case 150:
-                                        case 151:
-                                        case 154:
-                                        case 167:
-                                        case 178:
-                                        case 183:
-                                        case 184:
-                                        case 185:
-                                        case 186:
-                                        case 187:
-                                        case 188:
-                                        case 189:
-                                        case 190:
-                                        case 191:
-                                        case 192:
-                                        case 193:
-                                        case 194:
-                                        case 195:
-                                        case 196:
-                                            if (!Minecraft.getMinecraft().thePlayer.isSneaking())
-                                                return;
-                                            break;
-                                        // Some blocks are just replaced if you right click on them
-                                        case 6:
-                                        case 8:
-                                        case 9:
-                                        case 10:
-                                        case 11:
-                                        case 31:
-                                        case 32:
-                                        case 78:
-                                        case 106:
-                                            notthisblock = false;
-                                    }
-                                    BlockPos blockpos = blockpacket.getPosition();
-                                    float x = (float) (blockpos.getX() + 0.5);
-                                    float y = (float) (blockpos.getY() + 0.5);
-                                    float z = (float) (blockpos.getZ() + 0.5);
-                                    String c = x + " " + y + " " + z;
-                                    blocks.add(c);
-                                    System.out.println(c);
-                                    if (notthisblock) {
-                                        switch (blockpacket.getPlacedBlockDirection()) {
-                                            case 0:
-                                                y--;
-                                                break;
-                                            case 1:
-                                                y++;
-                                                break;
-                                            case 2:
-                                                z--;
-                                                break;
-                                            case 3:
-                                                z++;
-                                                break;
-                                            case 4:
-                                                x--;
-                                                break;
-                                            case 5:
-                                                x++;
-                                        }
-                                    }
-
-                                    float finalX = x;
-                                    float finalY = y;
-                                    float finalZ = z;
-                                    // Schedule the sound in main thread
-                                    Minecraft.getMinecraft().addScheduledTask(() -> Minecraft.getMinecraft()
-                                            .getSoundHandler()
-                                            .playSound(new PositionedSoundRecord(
-                                                    new ResourceLocation(((ItemBlock) blockpacket.getStack().getItem())
-                                                            .getBlock().stepSound.getPlaceSound()),
-                                                    // The pitch of block placing is 0.7936508, don't question it
-                                                    1f, 0.7936508f, finalX, finalY, finalZ)));
-                                    String d = x + " " + y + " " + z;
-                                    blocks.add(d);
-
-                                    // Delete the data after 600ms
-                                    try {
-                                        Thread.sleep(ping);
-                                        blocks.remove(c);
-                                        blocks.remove(d);
-                                        // Catching ConcurrentModificationException
-                                    } catch (Exception e) {
-                                    }
-                                }
-                            });
-                        }
-                    }
-                };
-                // Register the handler before the Minecraft handler so that some packets can be
-                // ignored
-                event.manager.channel().pipeline().addBefore("packet_handler", "asdfInHandler", handlerIn);
+                PacketHandler handler = new PacketHandler();
+                // Register the handler before the Minecraft handler so that some packets can be 7ignored
+                event.manager.channel().pipeline().addBefore("packet_handler", "asdfInHandler", handler);
                 // Register the handler after the Minecraft handler to play sound
-                event.manager.channel().pipeline().addAfter("packet_handler", "asdfOutHandler", handlerOut);
+                event.manager.channel().pipeline().addAfter("packet_handler", "asdfOutHandler", handler);
                 inited = true;
-                ping = Minecraft.getMinecraft().getCurrentServerData().pingToServer + 500;
             } else {
                 executor.execute(() -> {
                     while (Minecraft.getMinecraft().thePlayer == null)
@@ -324,6 +116,4 @@ public class ClientSideSounds {
             });
         }
     }
-
-    // That's it, simple, ez
 }
